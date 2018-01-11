@@ -1,0 +1,3 @@
+cellName,module,designType,numberOfLines,L,VTtype,mosType,nfin,AVT,direction
+logmm_Par_Core_N_001,MisMatch_Par,logmm_Par_Core_N,1,0.016,SVT,N,2,5.590169944,Parallel
+logmm_Par_Core_N_002,MisMatch_Par,logmm_Par_Core_N,1,0.02,SVT,N,2,5,Parallel

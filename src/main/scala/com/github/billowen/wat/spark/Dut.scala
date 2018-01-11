@@ -1,3 +1,7 @@
 package com.github.billowen.wat.spark
 
-case class Dut(name: String, module: String, designType: String, attributes: Map[String, String])
+import java.util.UUID
+
+case class Dut(project_id: UUID, name: String, module: String, design_type: String, attributes: Map[String, String]) {
+  var dut_id = UUID.randomUUID()
+}
