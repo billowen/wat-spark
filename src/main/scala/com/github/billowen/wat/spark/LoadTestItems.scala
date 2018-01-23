@@ -1,8 +1,9 @@
 package com.github.billowen.wat.spark
 
+import java.io.FileNotFoundException
 import java.util.UUID
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import com.datastax.spark.connector._
 import com.github.billowen.wat.spark.exception.{IllegalFileFormatException, ProjectNotFoundException}
@@ -15,6 +16,25 @@ object LoadTestItems {
 //    itemRDD
 //  }
 
+  def main(args: Array[String]): Unit = {
+    if (args.length < 2) {
+      System.err.println("Usage: LoadTestItems <file> <project>")
+      System.exit(1)
+    }
+
+    val fileName = args(0)
+    val projectName = args(1)
+    val conf = new SparkConf(true)
+      .setAppName("Load TestItems")
+    val sc = new SparkContext(conf)
+    try {
+      val error = load(projectName, fileName, sc)
+    } catch {
+      case ex : FileNotFoundException => println(s"File $fileName not found")
+    }
+    sc.stop()
+  }
+
   def load(projectName: String, file: String, sc: SparkContext): Unit = {
     val projectRDD = sc.cassandraTable("syms_wat_database", "projects_by_name")
       .select("project_id")
@@ -26,18 +46,24 @@ object LoadTestItems {
       val projectId = projectRDD.first().get[UUID]("project_id")
       val input = sc.textFile(file)
       val header = input.first()
-      val cols = header.split(",")
+      val cols = header.split(",").map(col=>col.trim)
+      val nameInd = cols.indexOf("structureName")
+      val typeInd = cols.indexOf("measurementType")
       if (!cols.contains("item"))
         throw IllegalFileFormatException("The test item definition files must contain column named item")
       else if (!cols.contains("structureName"))
         throw IllegalFileFormatException("The test item definition files must contain column named structureName")
       else {
-        val data = input.filter(row => row != header).map(row => row.split(",")).persist(StorageLevel.MEMORY_AND_DISK)
+        val data = input.filter(row => row != header).map(row => row.split(","))
+            .filter(row => row.length > nameInd && row.length > typeInd)
+            .filter(row => row(nameInd) != "" && row(typeInd) != "")
+            .persist(StorageLevel.MEMORY_AND_DISK)
         val structures = getAllStructure(cols, data).collect()
         var dutIds : Map[String, UUID] = Map()
         for (structure <- structures) {
           val structureRdd = sc.cassandraTable("syms_wat_database", "duts_by_name").select("dut_id")
-            .where("name=?, project_id=?", structure, projectId)
+            .where("name=?", structure)
+            .where("project_id=?", projectId)
           if (structureRdd.count() != 0)
             dutIds += (structure -> structureRdd.first().get[UUID]("dut_id"))
         }
@@ -52,11 +78,11 @@ object LoadTestItems {
   }
 
   def getAllStructure(headers: Array[String], dataRdd: RDD[Array[String]]): RDD[String] = {
-    dataRdd.map(lineData => {
-        val colNum = headers.indexOf("structureName")
-        lineData(colNum).trim
-      })
-      .distinct()
+    val colNum = headers.indexOf("structureName")
+    dataRdd.filter(lineData => lineData.length > colNum)
+        .filter(lineData => lineData(colNum) != "")
+        .map(lineData => lineData(colNum).trim)
+        .distinct()
   }
 
   def createTestItem(headers: Array[String], cellData: Array[String], projectId: UUID, dutIds: Map[String, UUID]): TestItem = {

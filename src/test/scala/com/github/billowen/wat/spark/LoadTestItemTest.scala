@@ -1,7 +1,9 @@
 package com.github.billowen.wat.spark
 
+import java.io.FileNotFoundException
 import java.util.UUID
 
+import com.github.billowen.wat.spark.LoadTestItems.load
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfter, FlatSpec}
 
@@ -12,6 +14,7 @@ class LoadTestItemTest extends FlatSpec with BeforeAndAfter {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test-load-wat")
+      .set("spark.cassandra.connection.host", "127.0.0.1")
     sc = new SparkContext(conf)
   }
   after {
@@ -40,6 +43,17 @@ class LoadTestItemTest extends FlatSpec with BeforeAndAfter {
     actual.test_id = testId
     expect.test_id = testId
     assert(actual == expect)
+  }
+
+  "Load a test item sample data to database" should "successful" in {
+    val fileName = "sample_items.csv"
+    val projectName = "demo"
+    println(fileName)
+    try {
+      val error = load(projectName, fileName, sc)
+    } catch {
+      case ex : FileNotFoundException => println(s"File $fileName not found")
+    }
   }
 
 }
