@@ -2,6 +2,10 @@ package com.github.billowen.wat.spark
 
 import java.util.UUID
 
-case class Dut(project_id: UUID, name: String, module: String, design_type: String, attributes: Map[String, String]) {
-  var dut_id = UUID.randomUUID()
+case class Dut(var project_id: UUID,
+               var dut_id: UUID = UUID.randomUUID(),
+               var name: String = "",
+               var module: String = "",
+               var design_type: String = "",
+               var attributes: Map[String, String] = Map()) {
 }

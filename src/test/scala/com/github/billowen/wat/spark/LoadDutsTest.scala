@@ -23,7 +23,7 @@ class LoadDutsTest extends FlatSpec with BeforeAndAfter {
     val headers = List("cellName", "module", "designType", "L", "mosType")
     val data = Array("Core_N_001, MisMatch, Core_N, 0.016, N")
     val projectId = UUID.randomUUID()
-    val expect = Dut(projectId, "Core_N_001", "MisMatch", "Core_N", Map("L"->"0.016", "mosType"->"N"))
+    val expect = Dut(projectId, UUID.randomUUID(), "Core_N_001", "MisMatch", "Core_N", Map("L"->"0.016", "mosType"->"N"))
     val strRdd = sc.parallelize(data)
     val actual = LoadDuts.convert(headers, strRdd, projectId)
     assert(actual.first() == expect)

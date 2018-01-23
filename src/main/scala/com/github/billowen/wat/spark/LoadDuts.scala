@@ -6,7 +6,6 @@ import java.util.UUID
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd._
 import com.datastax.spark.connector._
-import org.apache.spark.sql.SparkSession
 
 object LoadDuts {
   def main(args: Array[String]): Unit = {
@@ -59,22 +58,19 @@ object LoadDuts {
   def convert(headers: List[String], data: RDD[String], project_id:UUID): RDD[Dut] = {
     val dutRDD = data.map(_.split(","))
       .map(row => {
-        var cellName = ""
-        var module =""
-        var designType = ""
-        var attributes : Map[String, String] = Map()
+        val dut = Dut(project_id = project_id)
         for (i <- row.indices) {
           if (headers(i) == "cellName")
-            cellName = row(i).trim
+            dut.name = row(i).trim
           else if (headers(i) == "module")
-            module = row(i).trim
+            dut.module = row(i).trim
           else if (headers(i) == "designType")
-            designType = row(i).trim
+            dut.module = row(i).trim
           else {
-            attributes += (headers(i) -> row(i).trim)
+            dut.attributes += (headers(i) -> row(i).trim)
           }
         }
-        Dut(project_id, cellName, module, designType, attributes)
+        dut
       })
     dutRDD
   }
