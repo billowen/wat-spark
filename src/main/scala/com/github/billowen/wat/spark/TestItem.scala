@@ -2,11 +2,10 @@ package com.github.billowen.wat.spark
 
 import java.util.UUID
 
-case class TestItem(var project_id: UUID,
-                    var test_id : UUID = UUID.randomUUID(),
-                    var name: String = "",
-                    var measure_type: String = "",
-                    var dut_id: Option[UUID] = None,
+case class TestItem(project_id: UUID,
+                    item: String,
+                    var measurement: String = "",
+                    var dut_name: String = "",
                     var formula: String = "",
                     var unit: String = "",
                     var target: Option[Double] = None,

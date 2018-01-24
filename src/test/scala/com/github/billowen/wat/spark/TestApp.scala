@@ -9,8 +9,7 @@ object TestApp {
       .setAppName("test-load-wat")
       .set("spark.cassandra.connection.host", "127.0.0.1")
     val sc = new SparkContext(conf)
-    LoadTestItems.load("demo", "items.csv", sc)
+    LoadDuts.load("demo", "duts.csv", sc)
     sc.stop()
   }
-
 }

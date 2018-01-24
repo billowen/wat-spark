@@ -19,13 +19,21 @@ class LoadDutsTest extends FlatSpec with BeforeAndAfter {
     sc.stop()
   }
 
-  "Convert data into RDD[Dut]" should "successful in text" in {
+  "Create Dut object" should "successful" in {
     val headers = List("cellName", "module", "designType", "L", "mosType")
-    val data = Array("Core_N_001, MisMatch, Core_N, 0.016, N")
+    val data = List("Core_N_001", "MisMatch", "Core_N", "0.016", "N")
     val projectId = UUID.randomUUID()
-    val expect = Dut(projectId, UUID.randomUUID(), "Core_N_001", "MisMatch", "Core_N", Map("L"->"0.016", "mosType"->"N"))
-    val strRdd = sc.parallelize(data)
-    val actual = LoadDuts.convert(headers, strRdd, projectId)
-    assert(actual.first() == expect)
+    val expect = Dut(projectId, "Core_N_001", "MisMatch", "Core_N", Map("L"->"0.016", "mosType"->"N"))
+    val actual = LoadDuts.createDut(headers, data, projectId)
+    assert(actual == expect)
+  }
+
+  "Invalid row" should "not create dut successful" in  {
+    val headers = List("cellName", "module", "designType", "L", "mosType")
+    val data = List(", MisMatch, Core_N, 0.016, N")
+    val projectId = UUID.randomUUID()
+    val dataRdd = sc.parallelize(data)
+    val actual = LoadDuts.convert(headers, dataRdd, projectId)
+    assert(actual.count == 0)
   }
 }

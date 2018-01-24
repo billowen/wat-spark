@@ -6,6 +6,9 @@ import java.util.UUID
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd._
 import com.datastax.spark.connector._
+import com.github.billowen.wat.spark.exception.{IllegalFileFormatException, ProjectNotFoundException}
+
+import scala.util.Try
 
 object LoadDuts {
   def main(args: Array[String]): Unit = {
@@ -16,62 +19,58 @@ object LoadDuts {
 
     val fileName = args(0)
     val projectName = args(1)
-    println(fileName)
     val conf = new SparkConf(true).setAppName("Load Duts")
     val sc = new SparkContext(conf)
     try {
-      val error = load(projectName, fileName, sc)
+      load(projectName, fileName, sc)
     } catch {
-      case ex : FileNotFoundException => println(s"File $fileName not found")
+      case _ : FileNotFoundException => println(s"File $fileName not found")
+      case ex : ProjectNotFoundException => println(ex.msg)
+      case ex : IllegalFileFormatException => print(ex.msg)
     }
     sc.stop()
   }
 
-  def load(projectName: String, file: String, sc: SparkContext): String = {
+  def load(projectName: String, file: String, sc: SparkContext): Unit = {
     val projectRDD = sc.cassandraTable("syms_wat_database", "projects_by_name")
       .select("project_id")
-      .where("name=?", projectName)
-    var error = ""
+      .where("project_name=?", projectName)
     if (projectRDD.count() == 0)
-      error = "The project does not exist."
+      throw ProjectNotFoundException(s"The $projectName is not existed")
     else {
       val projectId = projectRDD.first().get[UUID]("project_id")
       val input = sc.textFile(file)
-      val header =  input.first() // extract header
-      val cols = header.split(",")
-      if (!cols.contains("cellName"))
-        error = "Missing column: cellName"
-      else if (!cols.contains("module"))
-        error = "Missing column： module"
-      else if (!cols.contains("designType"))
-        error = "Missing column: designType"
-      else {
-        val data = input.filter(row => row != header)
-        val cols = header.split(",").map(col => col.trim).toList
-        val dutRdd = convert(cols, data, projectId)
-        dutRdd.saveToCassandra("syms_wat_database", "duts",
-          SomeColumns("project_id", "dut_id", "name", "module", "design_type", "attributes"))
+      val headerLine =  input.first() // extract header
+      val headers = headerLine.split(",").map(s => s.trim)
+      val data = input.filter(row => row != headerLine)
+      convert(headers.toList, data, projectId)
+        .saveToCassandra("syms_wat_database", "duts",
+          SomeColumns("project_id", "dut_name", "module", "design_type", "attributes"))
+    }
+  }
+  def convert(headers: List[String], data: RDD[String], projectId:UUID): RDD[Dut] = {
+    val cellNameInd = headers.indexOf("cellName")
+    if (cellNameInd == -1) throw IllegalFileFormatException("Load duts: can not find the cellName column.")
+    data.map(_.split(","))
+      .map(row => Try(createDut(headers, row.toList, projectId)))
+      .filter(_.isSuccess)
+      .map(_.get)
+  }
+
+  def createDut(headers: List[String], row: List[String], projectId: UUID) : Dut = {
+    val cellNameInd = headers.indexOf("cellName")
+    if (cellNameInd == -1) throw IllegalFileFormatException("Load duts: can not find the cellName column.")
+    if (row.lengthCompare(cellNameInd) <= 0) throw IllegalFileFormatException("Load duts: can not find data of cellName")
+    if (row(cellNameInd) == "") throw IllegalFileFormatException("Load duts: the cellName can not be empty.")
+    val dut = Dut(projectId, row(cellNameInd))
+    for (i <- headers.indices) {
+      headers(i).trim match {
+        case "module" => if (row.lengthCompare(i) > 0 &&  row(i).trim != "") dut.module = row(i).trim
+        case "designType" => if (row.lengthCompare(i) > 0 && row(i).trim != "") dut.design_type = row(i).trim
+        case "cellName" =>
+        case _ => if (row.lengthCompare(i) > 0) dut.attributes += (headers(i).trim -> row(i).trim)
       }
     }
-    error
-  }
-  def convert(headers: List[String], data: RDD[String], project_id:UUID): RDD[Dut] = {
-    val dutRDD = data.map(_.split(","))
-      .map(row => {
-        val dut = Dut(project_id = project_id)
-        for (i <- row.indices) {
-          if (headers(i) == "cellName")
-            dut.name = row(i).trim
-          else if (headers(i) == "module")
-            dut.module = row(i).trim
-          else if (headers(i) == "designType")
-            dut.module = row(i).trim
-          else {
-            dut.attributes += (headers(i) -> row(i).trim)
-          }
-        }
-        dut
-      })
-    dutRDD
+    dut
   }
 }
