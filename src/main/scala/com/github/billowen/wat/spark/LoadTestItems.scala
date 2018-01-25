@@ -11,12 +11,6 @@ import com.github.billowen.wat.spark.exception.{IllegalFileFormatException, Proj
 import scala.util.Try
 
 object LoadTestItems {
-//  def convert(headers: Array[String], data: RDD[String], project_id: UUID, sc: SparkContext): RDD[TestItem] = {
-//    val itemRDD = data.map(_.split(","))
-//      .map(row => row.map(col => col.trim))
-//    itemRDD
-//  }
-
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       System.err.println("Usage: LoadTestItems <file> <project>")
