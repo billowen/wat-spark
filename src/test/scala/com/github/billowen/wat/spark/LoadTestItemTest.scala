@@ -22,38 +22,32 @@ class LoadTestItemTest extends FlatSpec with BeforeAndAfter {
   }
 
   "Create test item" should "successful" in {
-    val headers = Array("item", "unit", "measurementType", "structureName",
+    val headers = List("item", "unit", "measurementType", "structureName",
       "formula", "module", "designType", "target", "specLow", "specHigh", "controlLow", "controlHigh")
-    val data = Array("logmm_Par_Core_N_001_Idl", "", "Idl", "logmm_Par_Core_N_001", "$value==-1?1:$value*1000000.0/2.0",
+    val data = List("logmm_Par_Core_N_001_Idl", "", "Idl", "logmm_Par_Core_N_001", "$value==-1?1:$value*1000000.0/2.0",
       "MisMatch", "logmm_Par_Core_N", "", "", "", "", "")
     val projectId = UUID.randomUUID()
     val testId = UUID.randomUUID()
     val dutId = UUID.randomUUID()
     val dutMap = Map("logmm_Par_Core_N_001" -> dutId)
-    val expect = TestItem(projectId)
-    expect.name = data(0)
+    val expect = TestItem(projectId, "logmm_Par_Core_N_001_Idl")
     expect.unit = data(1)
-    expect.measure_type = data(2)
-    expect.dut_id = Some(dutId)
+    expect.measurement = data(2)
+    expect.dut_name = "logmm_Par_Core_N_001"
     expect.formula = data(4)
-    val strRdd = sc.parallelize(data)
-    val actual = LoadTestItems.createTestItem(headers, data, projectId, dutMap)
+    val actual = LoadTestItems.createTestItem(headers, data, projectId)
 
-    // Set the test id to the same
-    actual.test_id = testId
-    expect.test_id = testId
     assert(actual == expect)
   }
 
-  "Load a test item sample data to database" should "successful" in {
-    val fileName = "sample_items.csv"
-    val projectName = "demo"
-    println(fileName)
-    try {
-      val error = load(projectName, fileName, sc)
-    } catch {
-      case ex : FileNotFoundException => println(s"File $fileName not found")
-    }
+  "Invalid data" should "not create rdd" in {
+    val headers = List("item", "unit", "measurementType", "structureName",
+      "formula", "module", "designType", "target", "specLow", "specHigh", "controlLow", "controlHigh")
+    val data = List(", , Idl, logmm_Par_Core_N_001, $value==-1?1:$value*1000000.0/2.0, MisMatch, logmm_Par_Core_N, , , , , ")
+    val projectId = UUID.randomUUID()
+    val dataRdd = sc.parallelize(data)
+    val actual = LoadTestItems.convert(headers, dataRdd, projectId)
+    assert(actual.count == 0)
   }
 
 }
