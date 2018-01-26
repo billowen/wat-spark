@@ -30,19 +30,11 @@ object LoadTestData {
     // Update the statistic information of wafer and lot
     val lotInd = headers.indexOf("lot")
     val waferInd = headers.indexOf("wafer")
-    data.map(row => Try((row(lotInd).trim, row(waferInd).trim)))
-      .filter(_.isSuccess).map(_.get).distinct()
-      .map(item => waferSummary(projectId, item._1, item._2, sc))
-      .saveToCassandra("syms_wat_database", "wafers", SomeColumns(
-        "project_id", "lot", "wafer", "die_cnt", "test_cnt", "yield_rate"
-      ))
-    data.map(row => Try(row(lotInd).trim))
-      .filter(_.isSuccess)
-      .map(_.get)
-      .map(lotSummary(projectId, _, sc))
-      .saveToCassandra("syms_wat_database", "lots", SomeColumns(
-        "project_id", "lot", "wafer_cnt", "yield_rate"
-      ))
+    val waferRdd = data.map(row => Try((row(lotInd).trim, row(waferInd).trim)))
+      .filter(_.isSuccess).map(_.get).distinct().persist()
+
+    waferRdd.collect().toList.foreach(w => waferSummary(projectId, w._1, w._2, sc))
+    waferRdd.map(w => w._1).distinct().collect().toList.foreach(l => lotSummary(projectId, l, sc))
   }
 
   def convert(headers: List[String], data: RDD[Array[String]], projectId: UUID) : RDD[TestData] = {
@@ -104,15 +96,7 @@ object LoadTestData {
     test
   }
 
-  def updateStatistics(headers: List[String], data: RDD[Array[String]], projectId: UUID): Unit = {
-    val lotInd = headers.indexOf("lot")
-    val waferInd = headers.indexOf("wafer")
-    val waferRdd = data.map(row => Try({
-      (row(lotInd).trim, row(waferInd).trim)
-    })).filter(_.isSuccess).map(_.get).distinct().persist()
-  }
-
-  def waferSummary(projectId: UUID, lotName: String, waferName: String, sc: SparkContext): Wafer = {
+  def waferSummary(projectId: UUID, lotName: String, waferName: String, sc: SparkContext): Unit = {
     val waferDataRdd = sc.cassandraTable("syms_wat_database", "test_data").select("x", "y")
       .where("project_id=?", projectId)
       .where("lot=?", lotName)
@@ -125,16 +109,23 @@ object LoadTestData {
     waferDataRdd.distinct().foreach(_ => dieAcc.add(1))
     val dieCnt = dieAcc.value
 
-    Wafer(projectId, lotName, waferName, dieCnt, itemCnt)
+    sc.parallelize(Seq(Wafer(projectId, lotName, waferName, dieCnt, itemCnt)))
+      .saveToCassandra(
+        "syms_wat_database",
+        "wafers",
+        SomeColumns("project_id", "lot", "wafer", "die_cnt", "test_cnt", "yield_rate"))
+
   }
 
-  def lotSummary(projectId: UUID, lotName: String, sc: SparkContext) : Lot = {
+  def lotSummary(projectId: UUID, lotName: String, sc: SparkContext) : Unit = {
     var waferSummaryRdd = sc.cassandraTable("syms_wat_database", "wafers").select("wafer")
       .where("project_id=?", projectId)
       .where("lot=?", lotName)
     val waferAcc = sc.longAccumulator(s"Wafer count: $lotName")
     waferSummaryRdd.foreach(_ => waferAcc.add(1))
-    Lot(projectId, lotName, waferAcc.value)
+
+    sc.parallelize(Seq(Lot(projectId, lotName, waferAcc.value)))
+      .saveToCassandra("syms_wat_database", "lots", SomeColumns("project_id", "lot", "wafer_cnt", "yield_rate"))
   }
 
   def validateCell(colName: String, headers: List[String], row: List[String]) : Boolean = {
